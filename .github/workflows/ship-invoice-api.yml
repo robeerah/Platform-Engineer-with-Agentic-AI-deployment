@@ -1,0 +1,22 @@
+# Everything a service team adds to get CI/CD. The heavy lifting lives in
+# the platform-owned reusable workflow.
+name: ship-invoice-api
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/invoice-api/**", "platform/**", ".github/workflows/**"]
+  pull_request:
+    paths: ["services/invoice-api/**", "platform/**", ".github/workflows/**"]
+  workflow_dispatch:
+
+jobs:
+  ship:
+    uses: ./.github/workflows/service-pipeline.yml
+    with:
+      service_dir: services/invoice-api
+      deploy: ${{ github.event_name == 'push' && vars.ENABLE_LAB_DEPLOY == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit

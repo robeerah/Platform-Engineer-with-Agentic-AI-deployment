@@ -1,0 +1,17 @@
+# Single source of truth for teams and platform guardrails.
+# platformctl reads this file; nothing else defines who a team is.
+platform:
+  domain_suffix: localtest.me
+  limits:
+    max_replicas: 5
+    max_cpu: 1000          # MHz per instance
+    max_memory: 1024       # MB per instance
+    max_rate_limit: 1000   # requests per window per client IP
+
+teams:
+  payments:
+    description: Payments squad (invoices, settlements)
+    alert_channel: "#payments-alerts"
+  growth:
+    description: Growth squad (referrals, promos)
+    alert_channel: "#growth-alerts"

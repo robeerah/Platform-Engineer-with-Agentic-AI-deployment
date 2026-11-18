@@ -1,0 +1,24 @@
+# Alerts route by the `team` label that came from Consul tags.
+# To send to Slack, add a slack_configs block under a receiver, e.g.:
+#   slack_configs:
+#     - api_url: https://hooks.slack.com/services/XXX/YYY/ZZZ
+#       channel: "#payments-alerts"
+#       send_resolved: true
+route:
+  receiver: platform-default
+  group_by: [alertname, service]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 2h
+  routes:
+    - matchers: ['team="payments"']
+      receiver: payments-oncall
+    - matchers: ['team="growth"']
+      receiver: growth-oncall
+    - matchers: ['team="platform"']
+      receiver: platform-default
+
+receivers:
+  - name: platform-default
+  - name: payments-oncall
+  - name: growth-oncall

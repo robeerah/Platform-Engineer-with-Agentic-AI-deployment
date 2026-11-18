@@ -1,0 +1,43 @@
+# APISIX 3.x configuration for the lab (platform-owned).
+apisix:
+  node_listen: 9080
+  enable_ipv6: false
+  enable_control: true
+  control:            # moved off 9090 so it doesn't clash with Prometheus
+    ip: 127.0.0.1
+    port: 9092
+
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  admin:
+    admin_key:
+      - name: admin
+        key: platform-lab-admin-key   # lab only — never commit a real key
+        role: admin
+    allow_admin:
+      - 127.0.0.0/24
+    admin_listen:
+      ip: 127.0.0.1
+      port: 9180
+  etcd:
+    host:
+      - "http://127.0.0.1:2379"
+    prefix: /apisix
+    timeout: 30
+
+# Upstreams resolve service names through Consul, so new or moved
+# containers are picked up without touching the gateway.
+discovery:
+  consul:
+    servers:
+      - "http://127.0.0.1:8500"
+    fetch_interval: 3
+
+plugin_attr:
+  prometheus:
+    export_uri: /apisix/prometheus/metrics
+    export_addr:
+      ip: 127.0.0.1
+      port: 9091

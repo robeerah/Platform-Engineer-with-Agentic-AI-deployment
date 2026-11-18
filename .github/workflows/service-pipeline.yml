@@ -1,0 +1,164 @@
+# Reusable "golden path" pipeline, owned by the platform team.
+# Any service calls it with ~15 lines (see ship-invoice-api.yml).
+#
+#   validate ─► test ─► build + scan ─► smoke test on ephemeral Nomad
+#                                   └─► (optional) deploy to the lab via self-hosted runner
+name: service-pipeline
+
+on:
+  workflow_call:
+    inputs:
+      service_dir:
+        description: Path to the service folder (contains platform.yaml)
+        required: true
+        type: string
+      python_version:
+        required: false
+        type: string
+        default: "3.12"
+      deploy:
+        description: Deploy to the lab cluster through the self-hosted runner
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      image:
+        description: Image reference built by this run
+        value: ${{ jobs.build.outputs.image }}
+
+jobs:
+  validate:
+    name: Validate platform.yaml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      service: ${{ steps.meta.outputs.service }}
+      team: ${{ steps.meta.outputs.team }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y python3-yaml
+      - name: Check guardrails
+        run: python3 platform/platformctl.py validate "${{ inputs.service_dir }}"
+      - id: meta
+        name: Read service metadata
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import yaml
+          spec = yaml.safe_load(open("${{ inputs.service_dir }}/platform.yaml"))
+          print(f"service={spec['service']}")
+          print(f"team={spec['team']}")
+          EOF
+
+  test:
+    name: Unit tests
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.service_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q
+
+  build:
+    name: Build, scan and push image
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.img.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: img
+        name: Compute image name (tag = commit SHA)
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/${owner}/${{ needs.validate.outputs.service }}:${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: |
+          docker build \
+            --build-arg APP_VERSION="${GITHUB_SHA::7}" \
+            --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
+            --label team="${{ needs.validate.outputs.team }}" \
+            -t "${{ steps.img.outputs.image }}" "${{ inputs.service_dir }}"
+      - name: Vulnerability scan (fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.img.outputs.image }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Push to GHCR (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${{ steps.img.outputs.image }}"
+
+  smoke-test:
+    name: Smoke test on ephemeral Nomad + Consul
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SERVICE: ${{ needs.validate.outputs.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nomad and PyYAML
+        run: |
+          wget -qO- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update && sudo apt-get install -y nomad python3-yaml jq
+      - name: Start Consul and Nomad (dev mode)
+        run: |
+          docker run -d --name consul --network host hashicorp/consul:1.20.1 agent -dev -client=0.0.0.0
+          sudo nohup nomad agent -dev -bind=127.0.0.1 -config=infra/nomad/agent.hcl > nomad.log 2>&1 &
+          for i in $(seq 1 30); do nomad node status 2>/dev/null | grep -q ready && break; sleep 2; done
+          nomad node status
+      - name: Build image locally
+        run: docker build -t "${SERVICE}:ci" "${{ inputs.service_dir }}"
+      - name: Deploy through platformctl (same path developers use)
+        run: python3 platform/platformctl.py deploy "${{ inputs.service_dir }}" --image "${SERVICE}:ci"
+      - name: Verify every instance is healthy in Consul and answers
+        run: |
+          want=$(python3 -c "import yaml;print(yaml.safe_load(open('${{ inputs.service_dir }}/platform.yaml'))['replicas'])")
+          for i in $(seq 1 30); do
+            got=$(curl -s "http://127.0.0.1:8500/v1/health/service/${SERVICE}?passing" | jq length)
+            [ "$got" = "$want" ] && break; sleep 2
+          done
+          echo "healthy instances: ${got}/${want}"
+          [ "$got" = "$want" ]
+          addr=$(curl -s "http://127.0.0.1:8500/v1/health/service/${SERVICE}?passing" | jq -r '.[0].Service | "\(.Address):\(.Port)"')
+          curl -fsS "http://${addr}/healthz"
+          curl -fsS "http://${addr}/metrics" | grep -q app_requests_total
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          cat nomad.log | tail -100
+          nomad job status -namespace "${{ needs.validate.outputs.team }}" "${SERVICE}" || true
+
+  deploy:
+    name: Deploy to lab (self-hosted runner)
+    if: inputs.deploy
+    needs: [validate, build, smoke-test]
+    runs-on: [self-hosted, platform-lab]
+    environment: lab
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: python3 platform/platformctl.py deploy "${{ inputs.service_dir }}" --image "${{ needs.build.outputs.image }}"
+      - name: Expose through APISIX
+        run: python3 platform/platformctl.py expose "${{ inputs.service_dir }}"
+      - name: Status
+        run: python3 platform/platformctl.py status "${{ inputs.service_dir }}"

@@ -1,0 +1,51 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    env: lab
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["127.0.0.1:9093"]
+
+scrape_configs:
+  # Every service registered in Consul with the "metrics" tag is scraped
+  # automatically. No per-service config, ever.
+  - job_name: consul-services
+    sample_limit: 5000          # guardrail against label explosions
+    consul_sd_configs:
+      - server: 127.0.0.1:8500
+        tags: [metrics]
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_tags]
+        regex: .*,team=([^,]+),.*
+        target_label: team
+      - source_labels: [__meta_consul_service_metadata_metrics_path]
+        regex: (.+)
+        target_label: __metrics_path__
+      - source_labels: [__meta_consul_node]
+        target_label: node
+
+  # Gateway metrics: requests, status codes, latency per route.
+  - job_name: apisix
+    metrics_path: /apisix/prometheus/metrics
+    static_configs:
+      - targets: ["127.0.0.1:9091"]
+
+  # Nomad: CPU/memory per allocation, cluster health.
+  - job_name: nomad
+    metrics_path: /v1/metrics
+    params:
+      format: [prometheus]
+    static_configs:
+      - targets: ["127.0.0.1:4646"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]

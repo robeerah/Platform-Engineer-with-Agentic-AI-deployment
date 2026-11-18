@@ -1,0 +1,50 @@
+# Baseline alerts every service gets for free. Each alert carries the
+# service's `team` label, so Alertmanager can route it to the right squad.
+groups:
+  - name: golden-path-baseline
+    rules:
+      - alert: ServiceInstanceDown
+        expr: up{job="consul-services"} == 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.service }} instance {{ $labels.instance }} is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} (team {{ $labels.team }})."
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum by (service, team) (rate(app_requests_total{status=~"5.."}[2m]))
+          /
+            sum by (service, team) (rate(app_requests_total[2m]))
+          ) > 0.05
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.service }} 5xx rate is {{ $value | humanizePercentage }}"
+          description: "More than 5% of requests are failing for team {{ $labels.team }}."
+
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, service, team) (rate(app_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "{{ $labels.service }} p95 latency above 1s"
+          description: "p95 is {{ $value | humanizeDuration }} for team {{ $labels.team }}."
+
+  - name: platform-self-monitoring
+    rules:
+      - alert: GatewayDown
+        expr: up{job="apisix"} == 0
+        for: 1m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "APISIX metrics endpoint is down"

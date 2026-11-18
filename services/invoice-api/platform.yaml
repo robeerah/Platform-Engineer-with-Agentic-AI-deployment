@@ -1,0 +1,19 @@
+# platform.yaml — the ONLY platform file a service team writes.
+# The platform turns this into a Nomad job, an APISIX route,
+# Prometheus scraping, a dashboard entry and alert routing.
+service: invoice-api
+team: payments
+port: 8080
+health_path: /healthz
+metrics_path: /metrics
+replicas: 2
+resources:
+  cpu: 200      # MHz
+  memory: 128   # MB
+env:
+  LOG_LEVEL: info
+expose:
+  host: invoice.localtest.me   # *.localtest.me always resolves to 127.0.0.1
+  rate_limit:
+    requests: 300
+    per_seconds: 60
