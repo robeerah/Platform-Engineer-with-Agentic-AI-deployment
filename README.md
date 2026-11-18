@@ -2,7 +2,7 @@
 
 **A working internal developer platform built on Nomad, Consul, APISIX, Prometheus, Grafana and GitHub Actions.** A developer writes one 20-line `platform.yaml`, and the platform deploys, routes, rate-limits, monitors and alerts on their service. No tickets, no hand-written infrastructure config.
 
-![CI](https://github.com/YOUR_USERNAME/self-service-platform-lab/actions/workflows/ship-invoice-api.yml/badge.svg)
+![CI](https://github.com/robeerah/Platform-Engineer-with-Agentic-AI-deployment/actions/workflows/ship-invoice-api.yml/badge.svg)
 
 ![Grafana service overview](docs/screenshots/12-grafana-dashboard.png)
 

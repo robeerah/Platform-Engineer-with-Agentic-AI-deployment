@@ -36,7 +36,7 @@ jobs:
       service: ${{ steps.meta.outputs.service }}
       team: ${{ steps.meta.outputs.team }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sudo apt-get install -y python3-yaml
       - name: Check guardrails
         run: python3 platform/platformctl.py validate "${{ inputs.service_dir }}"
@@ -60,8 +60,8 @@ jobs:
       run:
         working-directory: ${{ inputs.service_dir }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python_version }}
       - run: pip install -r requirements.txt pytest
@@ -77,7 +77,7 @@ jobs:
     outputs:
       image: ${{ steps.img.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: img
         name: Compute image name (tag = commit SHA)
         run: |
@@ -91,7 +91,7 @@ jobs:
             --label team="${{ needs.validate.outputs.team }}" \
             -t "${{ steps.img.outputs.image }}" "${{ inputs.service_dir }}"
       - name: Vulnerability scan (fail on fixable CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ${{ steps.img.outputs.image }}
           severity: CRITICAL
@@ -112,7 +112,7 @@ jobs:
     env:
       SERVICE: ${{ needs.validate.outputs.service }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Nomad and PyYAML
         run: |
           wget -qO- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
@@ -155,7 +155,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Deploy
         run: python3 platform/platformctl.py deploy "${{ inputs.service_dir }}" --image "${{ needs.build.outputs.image }}"
       - name: Expose through APISIX
