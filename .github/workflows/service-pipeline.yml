@@ -29,7 +29,7 @@ on:
 jobs:
   validate:
     name: Validate platform.yaml
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -53,7 +53,7 @@ jobs:
   test:
     name: Unit tests
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -70,7 +70,7 @@ jobs:
   build:
     name: Build, scan and push image
     needs: [validate, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -106,7 +106,7 @@ jobs:
   smoke-test:
     name: Smoke test on ephemeral Nomad + Consul
     needs: [validate, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
