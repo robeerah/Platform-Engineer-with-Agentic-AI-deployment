@@ -104,3 +104,12 @@ Named per the checklist in docs/WALKTHROUGH.md. Extra shots for a phase use -2, 
 
 ![19-pr-guardrail](19-pr-guardrail-3.png)
 
+19-pr-guardrail-blocked.png
+
+![alt text](image.png)
+
+![alt text](image-1.png)
+
+![alt text](image-2.png)
+
+![alt text](image-3.png)
